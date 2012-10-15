@@ -1,4 +1,29 @@
 ﻿(function (window) {
+    //use observer for append event to object
+    var observer = function (obj) {
+        obj.observerEvents = {};
+        obj.listen = _listen;
+        obj.trigger = _trigger;
+    };
+
+    var _listen = function (eventName, fn) {
+        if (this.observerEvents[eventName] == null) {
+            this.observerEvents[eventName] = [];
+        }
+        this.observerEvents[eventName].push(fn);
+    };
+
+    var _trigger = function (eventName) {
+        var eventList = this.observerEvents[eventName];
+        for (var i = 0; i < eventList.length; i++) {
+            eventList[i].call(this);
+        }
+    };
+    window.observer = observer;
+})(window);
+
+
+(function (window) {
     "use strict";
 
     var exports = {};
@@ -14,13 +39,14 @@
         /// binding data
         ///</param>
 
-        var elements = rootElement.getElementsByTagName("*");
-        for (var i = 0; i < elements.length; i++) {
-            var element = elements[i];
-            if (element.hasAttribute("data-bind")) {
-                bindAttr(element.getAttribute("data-bind"), element, dataContext);
-            }
+
+        if (typeof dataContext.listen == 'function') {
+            dataContext.listen("changed", function () {
+                updateView(rootElement, dataContext.bgData);
+            });
         }
+
+        updateView(rootElement, dataContext.bgData || dataContext);
     };
 
     exports.as = function (dataContext) {
@@ -31,29 +57,25 @@
         /// convert object
         ///</param>
         var bObj = {
-            _isBO: true,
             bgData: dataContext,
-            _changeMap: {},
             set: function (options) {
+
+                var hasChange = false;
                 for (var i in options) {
                     if (this.bgData[i] != options[i]) {
-                        this.changed(this.bgData, i, options[i]);
+                        this.bgData[i] = options[i];
+                        hasChange = true;
                     }
                 }
-            },
-            changed: function (obj, property, value) {
-                obj[property] = value;
-                var mobj = this._changeMap[property];
-                if (mobj.changeHandle != undefined) {
-                    mobj.changeHandle(value);
+                if (hasChange) {
+                    this.trigger("changed");
                 }
+
             }
         };
 
-        for (var i in dataContext) {
-            bObj[i] = dataContext[i];
-            bObj._changeMap[i] = {};
-        }
+        observer(bObj);
+
         return bObj;
     }
 
@@ -64,15 +86,15 @@
             var domProperty = group[1];
             var objProperty = group[2];
             element[domProperty] = dataContext[objProperty];
-
-            updateView(element, dataContext, domProperty, objProperty);
         }
     };
 
-    var updateView = function (element, dataContext, domProperty, objProperty) {
-        if (dataContext._isBO) {
-            dataContext._changeMap[objProperty].changeHandle = function (value) {
-                element[domProperty] = value;
+    var updateView = function (rootElement, dataContext) {
+        var elements = rootElement.getElementsByTagName("*");
+        for (var i = 0; i < elements.length; i++) {
+            var element = elements[i];
+            if (element.getAttribute("data-bind") != null) {
+                bindAttr(element.getAttribute("data-bind"), element, dataContext);
             }
         }
     };
